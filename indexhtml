@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Scanner Padi - BPP Bola</title>
+    <style>
+        body { background: #0d1117; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
+        .card { background: #161b22; border: 2px solid #00ff9d; padding: 20px; border-radius: 20px; max-width: 400px; margin: auto; box-shadow: 0 0 20px rgba(0,255,157,0.2); }
+        .btn { background: #00ff9d; color: #0d1117; border: none; padding: 15px; border-radius: 10px; font-weight: bold; width: 100%; cursor: pointer; margin-top: 10px; font-size: 16px; transition: 0.3s; }
+        .btn:disabled { background: #30363d; color: #888; }
+        #preview, #resultImg { width: 100%; border-radius: 15px; margin-top: 15px; }
+        #result { background: #0d1117; padding: 15px; border-radius: 10px; margin-top: 15px; display: none; text-align: left; border-left: 5px solid #00ff9d; }
+        .loading { display: none; color: #00ff9d; margin: 15px 0; font-weight: bold; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h2 style="color:#00ff9d">🌾 SCANNER AI BPP BOLA</h2>
+    <p style="font-size: 0.8em; color: #888;">Penyuluh Milenial - Kec. Bola</p>
+    
+    <input type="file" id="fileInput" accept="image/*" style="display:none">
+    <button class="btn" style="background:#1f6feb; color:white" onclick="document.getElementById('fileInput').click()">📸 AMBIL FOTO / GALERI</button>
+   
+    <img id="preview">
+   
+    <button id="btnDetect" class="btn" style="display: none;" onclick="detectPadi()">🚀 ANALISIS SEKARANG</button>
+   
+    <div id="loader" class="loading">⏳ Sedang Menganalisis...</div>
+    
+    <div id="result">
+        <h3 id="resLabel" style="color:#00ff9d; margin:0;">-</h3>
+        <p id="resConf" style="font-size: 0.8em; color: #ffd700; margin-bottom: 10px;">Akurasi: 0%</p>
+        <hr style="border: 0.5px solid #333;">
+        <p><b>🔍 Gejala:</b> <span id="resGejala" style="font-size: 0.9em; color: #d1d5da;">-</span></p>
+        <p><b>✅ Solusi:</b> <span id="resSolusi" style="font-size: 0.9em; color: #d1d5da;">-</span></p>
+    </div>
+    <img id="resultImg">
+</div>
+
+<script>
+    // MASUKKAN URL EXEC TERBARU ANDA DI SINI
+    const urlAppScript = "https://script.google.com/macros/s/AKfycbyCYh65h_3lT4iWr97_RHJNZmaPTSHDp_uFPy_pAP_rvC5BxYHI1n3dn5iwrnNcER1X/exec";
+
+    // KAMUS TANI SESUAI MODEL KLASIFIKASI BARU (rice-disease-sg9l2/21)
+   const kamusTani = {
+        "healthy": { 
+            nama: "Daun Sehat", 
+            gejala: "Warna hijau segar, tidak ada bercak atau perubahan warna.", 
+            solusi: "Pertahankan pemupukan berimbang dan pantau secara rutin." 
+        },
+        "bacterial_leaf_blight": { 
+            nama: "Hawar Daun Bakteri (Kresek)", 
+            gejala: "Garis kuning/oranye di sepanjang pinggir daun yang mengering.", 
+            solusi: "Gunakan bakterisida, pastikan drainase lancar, kurangi pupuk Urea." 
+        },
+        "brown_spot": { 
+            nama: "Bercak Cokelat", 
+            gejala: "Bintik cokelat bulat atau oval merata di permukaan daun.", 
+            solusi: "Cukupi kebutuhan Kalium (KCL) untuk meningkatkan daya tahan tanaman." 
+        },
+        "leaf_blast": { 
+            nama: "Penyakit Blast", 
+            gejala: "Bercak cokelat berbentuk belah ketupat dengan pusat abu-abu.", 
+            solusi: "Semprot fungisida sistemik (Trisiklazol), kurangi kelembapan sawah." 
+        },
+        "leaf_scald": { 
+            nama: "Leaf Scald (Luka Daun)", 
+            gejala: "Bercak besar berbentuk perahu dengan tepi hijau kekuningan.", 
+            solusi: "Gunakan varietas tahan, atur jarak tanam agar tidak terlalu rapat." 
+        },
+        "narrow_brown_spot": { 
+            nama: "Bercak Cokelat Sempit", 
+            gejala: "Garis-garis cokelat sempit sejajar dengan tulang daun.", 
+            solusi: "Tambah dosis pupuk Kalium (KCL), perbaiki sistem drainase sawah." 
+        },
+        "unlabeled": { 
+            nama: "Objek Tidak Dikenali", 
+            gejala: "-", 
+            solusi: "Ambil foto daun lebih dekat dan pastikan fokus tajam (bukan rumpun)." 
+        }
+    };
+    
+    let finalB64 = "";
+
+    document.getElementById('fileInput').onchange = e => {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = event => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const MAX_DIM = 1024;
+                let w = img.width, h = img.height;
+                if (w > h) { if (w > MAX_DIM) { h *= MAX_DIM / w; w = MAX_DIM; } }
+                else { if (h > MAX_DIM) { w *= MAX_DIM / h; h = MAX_DIM; } }
+                canvas.width = w; canvas.height = h;
+                ctx.drawImage(img, 0, 0, w, h);
+                finalB64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
+                document.getElementById('preview').src = canvas.toDataURL('image/jpeg');
+                document.getElementById('preview').style.display = 'block';
+                document.getElementById('btnDetect').style.display = 'block';
+                document.getElementById('result').style.display = 'none';
+                document.getElementById('resultImg').style.display = 'none';
+            }
+        };
+        reader.readAsDataURL(file);
+    };
+
+  async function detectPadi() {
+    if(!finalB64) return;
+    document.getElementById('loader').style.display = 'block';
+    document.getElementById('btnDetect').disabled = true;
+
+    try {
+        const response = await fetch(urlAppScript, {
+            method: "POST",
+            body: JSON.stringify({ image: finalB64 })
+        });
+        const rawData = await response.json();
+        
+        let out = Array.isArray(rawData) ? rawData[0] : rawData;
+        if (out.outputs && out.outputs[0]) out = out.outputs[0];
+
+        let labelAI = "unlabeled";
+        let confidence = 0;
+
+        // --- LOGIKA PERBAIKAN UNTUK JSON TERBARU ANDA ---
+        if (out.classification_result) {
+            const res = out.classification_result;
+            
+            // Mengambil dari properti 'top' (paling akurat)
+            labelAI = res.top || "unlabeled";
+            
+            // Mengambil confidence (0.8353 -> 83.5%)
+            confidence = ((res.confidence || 0) * 100).toFixed(1);
+            
+            // Backup: jika .top kosong, ambil dari array predictions[0]
+            if (labelAI === "unlabeled" && res.predictions && res.predictions.length > 0) {
+                labelAI = res.predictions[0].class;
+                confidence = (res.predictions[0].confidence * 100).toFixed(1);
+            }
+        }
+
+        // Update Tampilan
+        const info = kamusTani[labelAI] || kamusTani["unlabeled"];
+        document.getElementById('resLabel').innerText = info.nama;
+        document.getElementById('resConf').innerText = `Akurasi: ${confidence}%`;
+        document.getElementById('resGejala').innerText = info.gejala;
+        document.getElementById('resSolusi').innerText = info.solusi;
+        document.getElementById('result').style.display = 'block';
+
+        if (out.annotated_image) {
+            const src = out.annotated_image.value || out.annotated_image;
+            document.getElementById('resultImg').src = "data:image/jpeg;base64," + src;
+            document.getElementById('resultImg').style.display = 'block';
+            document.getElementById('preview').style.display = 'none';
+        }
+
+    } catch (err) {
+        alert("Terjadi kesalahan teknis. Periksa URL Deployment Anda.");
+    } finally {
+        document.getElementById('loader').style.display = 'none';
+        document.getElementById('btnDetect').disabled = false;
+    }
+}
+</script>
+</body>
+</html>
